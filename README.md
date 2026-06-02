@@ -72,9 +72,11 @@ uvicorn src.api:app --reload
 # Visit: http://localhost:8000/hotels/{hotel_id}/attributes
 ```
 
-### 4. (Optional) Open the evidence UI
+### 4. (Optional) Run the Test Suite
 
-Open `ui/index.html` in any browser.
+```bash
+pytest tests/
+```
 
 ---
 
