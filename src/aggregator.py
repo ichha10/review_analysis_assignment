@@ -1,6 +1,9 @@
 import pandas as pd
 
 import re
+import pickle
+import numpy as np
+import os
 
 def build_hotel_profiles(df, clause_df):
     """
@@ -24,9 +27,10 @@ def build_hotel_profiles(df, clause_df):
     
     return clause_df
 
-def calculate_tiers(hotel_df):
+def calculate_tiers(hotel_df, vectorizer, ml_models):
     """
     Calculates the signal score for each attribute and maps it to a tier.
+    Sorts evidence by model confidence.
     """
     tiers = {}
     attrs = ['cleanliness', 'staff_service', 'wifi_quality', 'noise_level', 'location']
@@ -53,8 +57,26 @@ def calculate_tiers(hotel_df):
         else:
             tier = 'Fail'
             
-        # Get top 3 sentences as evidence (for simplicity, we grab the first 3 relevant)
-        evidence = attr_clauses['clause'].head(3).tolist()
+        # Sort evidence by confidence
+        if vectorizer and attr in ml_models:
+            clf = ml_models[attr]
+            clauses = attr_clauses['clause'].tolist()
+            if clauses:
+                X_subset = vectorizer.transform(clauses)
+                probs = clf.predict_proba(X_subset)
+                classes = list(clf.classes_)
+                if 'positive' in classes:
+                    pos_idx = classes.index('positive')
+                    neg_idx = classes.index('negative')
+                    scores_for_sort = probs[:, neg_idx] if tier == 'Fail' else probs[:, pos_idx]
+                    sorted_indices = np.argsort(scores_for_sort)[::-1]
+                    evidence = [clauses[i] for i in sorted_indices[:3]]
+                else:
+                    evidence = attr_clauses['clause'].head(3).tolist()
+            else:
+                evidence = []
+        else:
+            evidence = attr_clauses['clause'].head(3).tolist()
         
         tiers[attr] = {
             'tier': tier,
@@ -73,11 +95,23 @@ def run_aggregation(labeled_csv_path):
     
     clause_df = build_hotel_profiles(raw_df, clause_df)
     
+    print("Loading ML models for evidence sorting...")
+    vectorizer, ml_models = None, {}
+    if os.path.exists('models/attribute_classifier/tfidf_vectorizer.pkl'):
+        with open('models/attribute_classifier/tfidf_vectorizer.pkl', 'rb') as f:
+            vectorizer = pickle.load(f)
+        for attr in ['cleanliness', 'staff_service', 'wifi_quality', 'noise_level', 'location']:
+            try:
+                with open(f'models/attribute_classifier/{attr}_model.pkl', 'rb') as f:
+                    ml_models[attr] = pickle.load(f)
+            except Exception:
+                pass
+
     print("Calculating tiers per hotel...")
     hotel_profiles = {}
     
     for hotel_id, group in clause_df.groupby('hotel_id'):
-        hotel_profiles[hotel_id] = calculate_tiers(group)
+        hotel_profiles[hotel_id] = calculate_tiers(group, vectorizer, ml_models)
         
     return hotel_profiles
 
