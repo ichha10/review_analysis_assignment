@@ -1,15 +1,27 @@
 import pandas as pd
 
+import re
+
 def build_hotel_profiles(df, clause_df):
     """
-    Since the dataset lacks hotel IDs, we group by rating and semantic clusters,
-    or simply treat it as a massive corpus-level evaluation for the assignment.
-    For simplicity in this pipeline, we will generate a pseudo-hotel ID 
-    based on the review index (treating every 10 reviews as a 'hotel' cluster 
-    just to demonstrate the aggregation logic).
+    Extract real hotel names using a dictionary heuristic.
+    Fallback to 'Unknown Hotel' if no brand is mentioned.
     """
-    # Assign a pseudo hotel_id (1 hotel = 10 reviews)
-    clause_df['hotel_id'] = clause_df['review_idx'] // 10
+    chains = ['hilton', 'kimpton', 'monaco', 'marriott', 'hyatt', 'sheraton', 'westin', 'holiday inn', 'best western', 'ramada', 'radisson', 'wyndham', 'ritz', 'four seasons', 'w hotel']
+    pattern = re.compile(r'\b(' + '|'.join(chains) + r')\b', re.IGNORECASE)
+    
+    def extract_hotel(text):
+        match = pattern.search(str(text))
+        if match:
+            return match.group(1).title() + " Hotel"
+        return "Unknown Hotel"
+        
+    df['hotel_id'] = df['Review'].apply(extract_hotel)
+    
+    # Map back to clauses using review_idx
+    hotel_map = df['hotel_id'].to_dict() # index -> hotel_id
+    clause_df['hotel_id'] = clause_df['review_idx'].map(hotel_map)
+    
     return clause_df
 
 def calculate_tiers(hotel_df):
@@ -56,7 +68,10 @@ def run_aggregation(labeled_csv_path):
     print(f"Loading labels from {labeled_csv_path}...")
     clause_df = pd.read_csv(labeled_csv_path)
     
-    clause_df = build_hotel_profiles(None, clause_df)
+    # Load raw reviews to extract hotel names
+    raw_df = pd.read_csv('tripadvisor_hotel_reviews.csv')
+    
+    clause_df = build_hotel_profiles(raw_df, clause_df)
     
     print("Calculating tiers per hotel...")
     hotel_profiles = {}
@@ -67,11 +82,14 @@ def run_aggregation(labeled_csv_path):
     return hotel_profiles
 
 if __name__ == "__main__":
-    profiles = run_aggregation("../data/labeled_clauses.csv")
+    profiles = run_aggregation("data/labeled_clauses.csv")
     print(f"Aggregated tiers for {len(profiles)} pseudo-hotels.")
-    # Show example for hotel 0
-    print("\nExample Profile (Hotel 0):")
-    for attr, data in profiles[0].items():
-        print(f"  {attr.upper()}: {data['tier']} (Score: {data['score']})")
-        if data['evidence']:
-            print(f"    Evidence: '{data['evidence'][0]}'")
+    # Show example for Hilton Hotel
+    print("\nExample Profile (Hilton Hotel):")
+    if "Hilton Hotel" in profiles:
+        for attr, data in profiles["Hilton Hotel"].items():
+            print(f"  {attr.upper()}: {data['tier']} (Score: {data['score']})")
+            if data['evidence']:
+                print(f"    Evidence: '{data['evidence'][0]}'")
+    else:
+        print("Hilton Hotel not found in extraction.")
