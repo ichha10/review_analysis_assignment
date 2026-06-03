@@ -30,7 +30,7 @@ def get_all_hotel_ids():
     return {"hotel_ids": list(hotel_profiles.keys())}
 
 @app.get("/hotels/{hotel_id}/attributes")
-def get_hotel_attributes(hotel_id: int):
+def get_hotel_attributes(hotel_id: str):
     """
     Returns the Tier (Elite/Superior/Premium/Fail/Uncertain), Score, 
     and Top 3 pieces of Evidence for the requested Hotel ID.
