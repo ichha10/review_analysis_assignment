@@ -1,7 +1,8 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.calibration import CalibratedClassifierCV
 import pickle
 import os
 
@@ -13,7 +14,8 @@ def train_and_save_models():
     attrs = ['cleanliness', 'staff_service', 'wifi_quality', 'noise_level', 'location']
     
     print("Training fast ML models...\n")
-    vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
+    print("Using TF-IDF with Trigrams (max 25,000 features)...")
+    vectorizer = TfidfVectorizer(max_features=25000, stop_words='english', ngram_range=(1, 3))
     X = vectorizer.fit_transform(df['clause'].fillna(''))
     
     models = {}
@@ -30,7 +32,8 @@ def train_and_save_models():
             
         X_train, X_test, y_train, y_test = train_test_split(X_subset, y, test_size=0.2, random_state=42)
         
-        clf = LogisticRegression(max_iter=1000, class_weight='balanced')
+        svm = LinearSVC(max_iter=2000, class_weight='balanced')
+        clf = CalibratedClassifierCV(svm)
         clf.fit(X_train, y_train)
         
         models[attr] = clf
